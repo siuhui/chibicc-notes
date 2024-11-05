@@ -41,6 +41,8 @@ ret 指令在 x86-64 汇编语言中用于实现子程序返回机制。这条�
 2. 用 gcc 把汇编文件 tmp.s 汇编和链接，生成可执行文件 tmp
 3. 运行 tmp，把实际结果和预期结果对比
 
+这样做有个问题，退出状态码的取值是 0 到 255，所以 tmp 只有返回之间的数，才能正常测试。
+
 ### gcc 的 -static 是什么意思
 
 `-static`选项表示生成静态链接的可执行文件。静态链接会将所有需要的库直接包含在可执行文件中，这样生成的可执行文件在运行时不需要依赖外部库。
@@ -78,8 +80,8 @@ long int strtol(const char *str, char **endptr, int base);
 ### add 和 sub 指令是什么样的
 
 ```assembly
-add destination, source
-sub destination, source
+add source, destination
+sub source, destination
 ```
 
 - destination: 可以是寄存器或内存位置。
@@ -170,3 +172,71 @@ void log(FILE *file, const char *format, ...) {
     va_end(args);
 }
 ```
+
+## Improve error message
+
+commit `cc5a6d978144bda90220bd10866c4fd908d07546`
+
+感觉只是粗略的处理了一下，代码在终端显示有多行的时候 ^ 不能指到出错的位置。
+
+### `fprintf(stderr, "%*s", pos, "")` 为什么会打印空格
+
+## Add *, / and ()
+
+commit `84cfcaf98f3d19c8f0f316e22a61725ad201f0f6`
+
+做表达式的 parser 和 codegen
+
+### NodeKind
+
+```c
+typedef enum {
+  ND_ADD, // +
+  ND_SUB, // -
+  ND_MUL, // *
+  ND_DIV, // /
+  ND_NUM, // Integer
+} NodeKind;
+```
+
+前四个是二元操作符，所以又抽象出构造二元节点的函数，ND_NUM 对应数字节点
+
+### 文法
+
+```
+expr:
+  expr -> expr "+" mul
+        | expr "-" mul
+        | mul
+
+mul:
+  mul -> mul "*" primary
+       | mul "/" primary
+       | primary
+
+primary:
+  primary -> "(" expr ")"
+           | NUM
+```
+
+### push 和 pop 指令
+
+```assembly
+push <src>
+```
+
+`<src>`：可以是立即数、寄存器或内存地址
+
+```assembly
+pop <dst>
+```
+
+`<dst>`：可以是寄存器或内存地址
+
+### 怎么从 AST 生成汇编
+
+### 先处理 rhs 或 lhs 有什么区别吗
+
+这里先处理 rhs, 在处理减和除这种有顺序的运算好像要方便一点，因为最后结果放在 rax 上。
+
+### `cqo` 和 `idiv`
