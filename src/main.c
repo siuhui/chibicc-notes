@@ -118,7 +118,7 @@ static int get_number(Token *token) {
  * Parser
  */
 
-typedef enum { ND_ADD, ND_SUB, ND_MUL, ND_DIV, ND_NUM } NodeKind;
+typedef enum { ND_ADD, ND_SUB, ND_MUL, ND_DIV, ND_NEG, ND_NUM } NodeKind;
 
 typedef struct Node {
   NodeKind kind;
@@ -140,6 +140,12 @@ static Node *new_binary(NodeKind kind, Node *lhs, Node *rhs) {
   return node;
 }
 
+static Node *new_unary(NodeKind kind, Node *expr) {
+  Node *node = new_node(kind);
+  node->lhs = expr;
+  return node;
+}
+
 static Node *new_num(int value) {
   Node *node = new_node(ND_NUM);
   node->value = value;
@@ -148,6 +154,7 @@ static Node *new_num(int value) {
 
 static Node *expr(Token **rest, Token *token);
 static Node *mul(Token **rest, Token *token);
+static Node *unary(Token **rest, Token *token);
 static Node *primary(Token **rest, Token *token);
 
 static Node *expr(Token **rest, Token *token) {
@@ -170,15 +177,15 @@ static Node *expr(Token **rest, Token *token) {
 }
 
 static Node *mul(Token **rest, Token *token) {
-  Node *node = primary(&token, token);
+  Node *node = unary(&token, token);
   while (true) {
     if (equal(token, "*")) {
-      node = new_binary(ND_MUL, node, primary(&token, token->next));
+      node = new_binary(ND_MUL, node, unary(&token, token->next));
       continue;
     }
 
     if (equal(token, "/")) {
-      node = new_binary(ND_DIV, node, primary(&token, token->next));
+      node = new_binary(ND_DIV, node, unary(&token, token->next));
       continue;
     }
 
@@ -186,6 +193,18 @@ static Node *mul(Token **rest, Token *token) {
 
     return node;
   }
+}
+
+static Node *unary(Token **rest, Token *token) {
+  if (equal(token, "+")) {
+    return unary(rest, token->next);
+  }
+
+  if (equal(token, "-")) {
+    return new_unary(ND_NEG, unary(rest, token->next));
+  }
+
+  return primary(rest, token);
 }
 
 static Node *primary(Token **rest, Token *token) {
@@ -229,6 +248,12 @@ static void gen_expr(Node *node) {
     return;
   }
 
+  if (node->kind == ND_NEG) {
+    gen_expr(node->lhs);
+    printf("  neg %%rax\n");
+    return;
+  }
+
   gen_expr(node->rhs);
   push("%rax");
   gen_expr(node->lhs);
@@ -261,6 +286,10 @@ int main(int argc, char **argv) {
   code = argv[1];
   Token *token = tokenize(code);
   Node *node = expr(&token, token);
+
+  if (token->kind != TK_EOF) {
+    error_token(token, "extra token");
+  }
 
   printf("  .global main\n");
   printf("main:\n");
